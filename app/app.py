@@ -1,11 +1,12 @@
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import streamlit as st
 import pandas as pd
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.agent.llm_agent import InvoiceExtractionAgent
+from src.utils.pdf_extractor import extract_text_from_pdf
 
 # ---------------------------------------------------------
 # Page Configuration & Styling
@@ -18,7 +19,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
-# Sample Test Invoices (Pre-loaded for Quick Demos)
+# Sample Test Invoices (Fallback String Data)
 # ---------------------------------------------------------
 SAMPLE_PASSING_INVOICE = """UPS FREIGHT INVOICE #UPS-994112
 Date: February 10, 2026
@@ -58,7 +59,6 @@ Total Item Charge: $45.00  <-- CORRUPTED: 30 + 5 + 1.50 = 36.50, NOT 45.00"""
 # ---------------------------------------------------------
 @st.cache_resource
 def get_extraction_agent():
-    """Initializes the agent once and caches it across user interactions."""
     return InvoiceExtractionAgent()
 
 
@@ -80,45 +80,62 @@ with st.sidebar:
     st.divider()
     st.markdown("**Active Defenses:**")
     st.markdown("- **Privacy Layer:** PII Masking (SpaCy + Regex)")
-    st.markdown("- **Defense 1:** Schema Guardrails (Pydantic)")
+    st.markdown("- **Defense 1:** Schema Guardrails (Pydantic + Instructor)")
     st.markdown("- **Defense 2:** Math Verification (Python Engine)")
 
 # ---------------------------------------------------------
-# Main Panel: Header & Inputs
+# Main Panel: Header & File/Text Input
 # ---------------------------------------------------------
 st.title("📦 Logistics Billing Anomaly & AI Audit Agent")
-st.caption("Automated carrier invoice extraction, privacy masking, and deterministic arithmetic verification.")
+st.caption("End-to-End Pipeline: PDF Ingestion ➔ PII Masking ➔ Schema Extraction ➔ Deterministic Math Verification")
 
-# Default session state initialization
 if "invoice_input" not in st.session_state:
     st.session_state["invoice_input"] = SAMPLE_PASSING_INVOICE
 
-# User input text area
-invoice_text_input = st.text_area(
-    label="Carrier Invoice Raw Text / Snippet:",
+# 1. File Uploader for Raw PDFs or Text files
+uploaded_file = st.file_uploader(
+    label="Upload Carrier Invoice (.pdf or .txt):",
+    type=["pdf", "txt"],
+    help="Upload a real carrier PDF invoice or text file."
+)
+
+if uploaded_file is not None:
+    try:
+        if uploaded_file.name.endswith(".pdf"):
+            extracted_pdf_text = extract_text_from_pdf(uploaded_file)
+            st.session_state["invoice_input"] = extracted_pdf_text
+            st.success(f"📄 Successfully extracted text from '{uploaded_file.name}'!")
+        else:
+            st.session_state["invoice_input"] = uploaded_file.read().decode("utf-8")
+            st.success(f"📄 Successfully loaded text file '{uploaded_file.name}'!")
+    except Exception as e:
+        st.error(f"Failed to read file: {e}")
+
+# 2. Editable Text Area
+invoice_text = st.text_area(
+    label="Active Invoice Text (Pre-processed for Audit):",
     value=st.session_state["invoice_input"],
     height=200,
-    help="Paste raw text extracted from a PDF invoice or carrier email."
+    help="You can edit or verify the text before triggering the AI audit pipeline."
 )
-invoice_text = invoice_text_input or ""
 
-# Execution Button
-run_audit = st.button("🚀 Run AI Audit & Verification", type="primary", use_container_width=True)
+# 3. Execution Button
+run_audit = st.button("🚀 Run Full AI Audit Pipeline", type="primary", use_container_width=True)
 
 # ---------------------------------------------------------
 # Execution & Results Rendering
 # ---------------------------------------------------------
 if run_audit:
     if not invoice_text.strip():
-        st.warning("⚠️ Please provide invoice text to analyze.")
+        st.warning("⚠️ Please provide or upload invoice text to analyze.")
     else:
-        with st.spinner("Scrubbing PII, extracting structured schema, and running arithmetic verification..."):
+        with st.spinner("Executing Pipeline: Scrubbing PII ➔ Extracting Schema ➔ Running Math Checks..."):
             try:
                 extracted_data, pii_stats, math_report = agent.extract(invoice_text)
 
                 st.divider()
 
-                # --- 1. Top Status Badge (Defense 2 Result) ---
+                # --- Status Badge (Defense 2 Verification) ---
                 if math_report.is_passed:
                     st.success(
                         "### ✅ DEFENSE 2 PASSED: 100% Arithmetic Integrity Verified\n"
@@ -130,7 +147,7 @@ if run_audit:
                         "One or more line items failed deterministic arithmetic verification. Ground-truth math does not match billed totals."
                     )
 
-                # --- 2. Executive Metric Cards ---
+                # --- Executive Metric Cards ---
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric(label="Invoice Number", value=extracted_data.invoice_number)
@@ -149,7 +166,7 @@ if run_audit:
 
                 st.write("")
 
-                # --- 3. Detailed Results Tabs ---
+                # --- Detailed Results Tabs ---
                 tab_table, tab_json, tab_privacy = st.tabs([
                     "📊 Line Item Verification Table",
                     "🔍 Extracted Pydantic JSON",
