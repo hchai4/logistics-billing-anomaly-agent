@@ -23,3 +23,6 @@ reportlab==5.0.1
 # Database
 psycopg2-binary==2.9.13
 SQLAlchemy==2.0.52
+
+# SciPy
+scipy==1.18.1
