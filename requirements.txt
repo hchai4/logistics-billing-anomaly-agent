@@ -26,3 +26,6 @@ SQLAlchemy==2.0.52
 
 # SciPy
 scipy==1.18.1
+
+# Requests
+requests==2.34.2
