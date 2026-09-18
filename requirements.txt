@@ -13,8 +13,10 @@ pandas>=2.0.0
 spacy>=3.5.0
 python-dotenv>=1.0.0
 
-# Testing
+# Testing & linting
 pytest>=7.0.0
+black>=24.0.0
+flake8>=7.0.0
 
 # PDF Processing
 pypdf==6.18.0

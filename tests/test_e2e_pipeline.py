@@ -1,5 +1,4 @@
 import os
-import pytest
 from src.privacy.pii_masker import PIIMasker
 from src.utils.pdf_extractor import extract_text_from_pdf
 from src.agent.math_verifier import MathVerifier
@@ -25,7 +24,9 @@ def test_pii_masker_redacts_sensitive_info():
 def test_pdf_extraction_from_file():
     """Verify that PDF text extractor reads real sample PDF files."""
     sample_pdf_path = "data/sample_valid_invoice.pdf"
-    assert os.path.exists(sample_pdf_path), "Sample PDF does not exist. Run data/generate_sample_pdfs.py first."
+    assert os.path.exists(
+        sample_pdf_path
+    ), "Sample PDF does not exist. Run data/generate_sample_pdfs.py first."
 
     extracted_text = extract_text_from_pdf(sample_pdf_path)
     assert len(extracted_text) > 50
@@ -42,13 +43,13 @@ def test_math_verifier_detects_valid_invoice():
         base_charge=20.00,
         fuel_surcharge=4.00,
         tax=1.00,
-        grand_total=25.00  # 20.00 + 4.00 + 1.00 = 25.00
+        grand_total=25.00,  # 20.00 + 4.00 + 1.00 = 25.00
     )
     invoice = CarrierInvoiceExtraction(
         invoice_number="INV-001",
         carrier_name="UPS",
         invoice_date="2026-02-10",
-        items=[item]
+        items=[item],
     )
 
     report = verifier.verify_invoice(invoice)
@@ -66,13 +67,13 @@ def test_math_verifier_flags_corrupted_math():
         base_charge=20.00,
         fuel_surcharge=4.00,
         tax=1.00,
-        grand_total=35.00  # Expected: 25.00, Billed: 35.00 (Variance: $10.00)
+        grand_total=35.00,  # Expected: 25.00, Billed: 35.00 (Variance: $10.00)
     )
     invoice = CarrierInvoiceExtraction(
         invoice_number="INV-002",
         carrier_name="FEDEX",
         invoice_date="2026-02-10",
-        items=[item]
+        items=[item],
     )
 
     report = verifier.verify_invoice(invoice)

@@ -1,14 +1,12 @@
 import os
 import psycopg2
 from dotenv import load_dotenv
-from typing import List
 from src.agent.schemas import CarrierInvoiceExtraction, InvoiceItem
 
 load_dotenv()
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql://postgres:postgres@localhost:5432/logistics_db"
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/logistics_db"
 )
 
 
@@ -16,11 +14,13 @@ def get_db_connection():
     return psycopg2.connect(DATABASE_URL)
 
 
-def insert_extracted_invoice(invoice: CarrierInvoiceExtraction, source_label: str = "PORTAL_PDF_AI") -> int:
+def insert_extracted_invoice(
+    invoice: CarrierInvoiceExtraction, source_label: str = "PORTAL_PDF_AI"
+) -> int:
     """
-    Inserts a validated Pydantic CarrierInvoiceExtraction document into 
+    Inserts a validated Pydantic CarrierInvoiceExtraction document into
     source_enterprise.raw_portal_extracted_invoices in PostgreSQL.
-    
+
     Returns:
         int: Number of line items successfully inserted.
     """
@@ -39,16 +39,18 @@ def insert_extracted_invoice(invoice: CarrierInvoiceExtraction, source_label: st
 
     records_to_insert = []
     for item in invoice.items:
-        records_to_insert.append((
-            item.tracking_id,
-            invoice.invoice_number,
-            invoice.carrier_name,
-            item.billed_weight,
-            item.base_charge,
-            item.fuel_surcharge,
-            item.grand_total,
-            source_label
-        ))
+        records_to_insert.append(
+            (
+                item.tracking_id,
+                invoice.invoice_number,
+                invoice.carrier_name,
+                item.billed_weight,
+                item.base_charge,
+                item.fuel_surcharge,
+                item.grand_total,
+                source_label,
+            )
+        )
 
     if not records_to_insert:
         return 0
@@ -69,15 +71,17 @@ if __name__ == "__main__":
         base_charge=35.00,
         fuel_surcharge=5.00,
         tax=0.0,
-        grand_total=40.00
+        grand_total=40.00,
     )
-    
+
     sample_invoice = CarrierInvoiceExtraction(
         invoice_number="TEST-MANUAL-001",
         carrier_name="UPS",
         invoice_date="2026-02-12",
-        items=[sample_item]
+        items=[sample_item],
     )
 
     rows_inserted = insert_extracted_invoice(sample_invoice)
-    print(f"✅ DB Writer Test: Successfully inserted {rows_inserted} line item into PostgreSQL.")
+    print(
+        f"✅ DB Writer Test: Successfully inserted {rows_inserted} line item into PostgreSQL."
+    )

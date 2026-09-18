@@ -1,8 +1,56 @@
-venv/
+# ---------------------------------------------------------
+# Secrets & credentials -- never commit these
+# ---------------------------------------------------------
 .env
-pycache/
-.pyc
-.DS_Store
-data/.csv
-data/*.pdf
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+secrets.toml
+.streamlit/secrets.toml
+
+# ---------------------------------------------------------
+# Python
+# ---------------------------------------------------------
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---------------------------------------------------------
+# Test & type-check caches
+# ---------------------------------------------------------
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------------------------------------------------------
+# Generated data & artifacts
+# ---------------------------------------------------------
+# Warehouse fixtures and sample invoices are regenerable via
+# data/generate_data.py and data/generate_sample_pdfs.py.
+data/*.csv
+data/*.pdf
+logs/
+target/
+dbt_packages/
+
+# ---------------------------------------------------------
+# OS & editor cruft
+# ---------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

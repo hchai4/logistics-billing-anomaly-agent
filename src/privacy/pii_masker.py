@@ -6,7 +6,9 @@ from typing import Dict, Tuple
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
-    raise RuntimeError("SpaCy model 'en_core_web_sm' not found. Run: python -m spacy download en_core_web_sm")
+    raise RuntimeError(
+        "SpaCy model 'en_core_web_sm' not found. Run: python -m spacy download en_core_web_sm"
+    )
 
 
 class PIIMasker:
@@ -18,41 +20,68 @@ class PIIMasker:
     def __init__(self):
         # Regex patterns for deterministic PII
         self.email_pattern = re.compile(
-            r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+            r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
         )
         self.phone_pattern = re.compile(
-            r'(\+?\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}'
+            r"(?<![A-Za-z0-9])(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?![A-Za-z0-9])"
+        )
+        self.tracking_line_pattern = re.compile(
+            r"^\s*(?:Tracking(?:\s+(?:Number|ID))?|Waybill(?:\s+(?:Number|ID))?|AWB)"
+            r"\s*:\s*(?P<value>[^\r\n]*)$",
+            re.IGNORECASE | re.MULTILINE,
         )
         # Match street addresses with optional city/state/ZIP suffixes.
         self.address_pattern = re.compile(
-            r'\b\d{1,6}\s+[A-Za-z0-9.\'-]+(?:\s+[A-Za-z0-9.\'-]+){0,6}\s+'
-            r'(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|'
-            r'Court|Ct|Circle|Cir|Place|Pl|Terrace|Ter|Way|Parkway|Pkwy|Highway|Hwy)\b'
-            r'(?:,\s*[A-Za-z.\'-]+(?:\s+[A-Za-z.\'-]+){0,4})?'
-            r'(?:,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?)?',
-            re.IGNORECASE
+            r"\b\d{1,6}\s+[A-Za-z0-9.\'-]+(?:\s+[A-Za-z0-9.\'-]+){0,6}\s+"
+            r"(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|"
+            r"Court|Ct|Circle|Cir|Place|Pl|Terrace|Ter|Way|Parkway|Pkwy|Highway|Hwy)\b\.?"
+            r"(?:,\s*[A-Za-z.\'-]+(?:\s+[A-Za-z.\'-]+){0,4})?"
+            r"(?:,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?)?",
+            re.IGNORECASE,
         )
+
+    def _phone_matches(self, text: str) -> list[re.Match[str]]:
+        """Find phone numbers, excluding values explicitly labeled as tracking IDs."""
+        tracking_spans = [
+            match.span("value") for match in self.tracking_line_pattern.finditer(text)
+        ]
+        return [
+            match
+            for match in self.phone_pattern.finditer(text)
+            if not any(
+                match.start() >= start and match.end() <= end
+                for start, end in tracking_spans
+            )
+        ]
+
+    def _mask_phones(self, text: str) -> str:
+        """Mask only phone matches that are not part of a tracking field."""
+        matches = self._phone_matches(text)
+        for match in reversed(matches):
+            text = text[: match.start()] + "[REDACTED_PHONE]" + text[match.end() :]
+        return text
 
     def mask_deterministic_pii(self, text: str) -> str:
         """Masks emails, phone numbers, and street addresses using regex."""
         text = self.email_pattern.sub("[REDACTED_EMAIL]", text)
-        text = self.phone_pattern.sub("[REDACTED_PHONE]", text)
+        text = self._mask_phones(text)
         text = self.address_pattern.sub("[REDACTED_ADDRESS]", text)
         return text
 
-# ?????
     def mask_named_entities(self, text: str) -> str:
         """Uses SpaCy NER to redact Person Names and Organizations if needed."""
         doc = nlp(text)
         masked_text = text
-        
+
         # Redact PERSON entities from end to start to preserve string indices
         for ent in sorted(doc.ents, key=lambda x: x.start_char, reverse=True):
             if ent.label_ in ["PERSON"]:
                 start = ent.start_char
                 end = ent.end_char
-                masked_text = masked_text[:start] + "[REDACTED_NAME]" + masked_text[end:]
-                
+                masked_text = (
+                    masked_text[:start] + "[REDACTED_NAME]" + masked_text[end:]
+                )
+
         return masked_text
 
     def mask(self, raw_text: str) -> Tuple[str, Dict[str, int]]:
@@ -65,11 +94,12 @@ class PIIMasker:
         # Count total redactions for audit logging
         counts = {
             "emails": len(self.email_pattern.findall(raw_text)),
-            "phones": len(self.phone_pattern.findall(raw_text)),
+            "phones": len(self._phone_matches(raw_text)),
             "addresses": len(self.address_pattern.findall(raw_text)),
         }
-        
+
         return masked, counts
+
 
 if __name__ == "__main__":
     # Test script with a raw sample invoice containing sensitive PII
@@ -79,7 +109,7 @@ if __name__ == "__main__":
     Bill To: Customer John Doe
     Contact Email: john.doe@acme-ecomm.com | Phone: (555) 234-5678
     Ship To Address: 742 Evergreen Terrace, Springfield, OR 97477
-    
+
     Item Details:
     Tracking ID: 1Z9999999999999999
     Billed Weight: 18.5 lbs

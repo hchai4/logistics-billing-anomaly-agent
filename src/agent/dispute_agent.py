@@ -14,22 +14,34 @@ class DisputeRequest(BaseModel):
     """
     Input schema for requesting an automated dispute claim letter.
     """
+
     invoice_number: str = Field(description="Carrier invoice identifier")
-    carrier_name: str = Field(description="Name of the shipping carrier (UPS, FedEx, DHL)")
+    carrier_name: str = Field(
+        description="Name of the shipping carrier (UPS, FedEx, DHL)"
+    )
     tracking_id: str = Field(description="Package tracking number")
     billed_weight: float = Field(description="Weight billed by carrier in lbs")
-    actual_weight: float = Field(description="Actual weight recorded by WMS scale in lbs")
+    actual_weight: float = Field(
+        description="Actual weight recorded by WMS scale in lbs"
+    )
     billed_cost: float = Field(description="Total cost billed by carrier in USD")
-    expected_cost: float = Field(description="Expected cost based on WMS scale weight in USD")
-    dollar_variance: float = Field(description="Overcharge amount requested for refund in USD")
+    expected_cost: float = Field(
+        description="Expected cost based on WMS scale weight in USD"
+    )
+    dollar_variance: float = Field(
+        description="Overcharge amount requested for refund in USD"
+    )
 
 
 class DisputeResponse(BaseModel):
     """
     Output schema containing the generated dispute letter and metadata.
     """
+
     tracking_id: str
-    dispute_letter: str = Field(description="Formal executive dispute letter to carrier billing support")
+    dispute_letter: str = Field(
+        description="Formal executive dispute letter to carrier billing support"
+    )
     claim_amount: float = Field(description="Total dollar refund claimed")
 
 
@@ -63,9 +75,9 @@ class DisputeAgent:
             response_model=DisputeResponse,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
-            temperature=0.2
+            temperature=0.2,
         )
 
         return response

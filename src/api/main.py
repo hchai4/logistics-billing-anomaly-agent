@@ -11,7 +11,7 @@ from src.agent.dispute_agent import DisputeAgent, DisputeRequest, DisputeRespons
 app = FastAPI(
     title="Logistics Billing Anomaly & AI Agent API",
     description="Enterprise REST API for PII Masking, Type-Safe LLM Invoice Extraction, Math Verification, and Dispute Generation.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Instantiate Agents
@@ -41,7 +41,9 @@ def health_check():
     return {"status": "healthy", "service": "Logistics AI Agent API"}
 
 
-@app.post("/api/extract", response_model=ExtractResponse, status_code=status.HTTP_200_OK)
+@app.post(
+    "/api/extract", response_model=ExtractResponse, status_code=status.HTTP_200_OK
+)
 def extract_invoice(payload: ExtractRequest):
     """
     Primary Extraction Endpoint:
@@ -53,20 +55,26 @@ def extract_invoice(payload: ExtractRequest):
         raise HTTPException(status_code=400, detail="raw_text field cannot be empty.")
 
     try:
-        extracted_data, pii_stats, math_report = extraction_agent.extract(payload.raw_text)
+        extracted_data, pii_stats, math_report = extraction_agent.extract(
+            payload.raw_text
+        )
         return ExtractResponse(
             extracted_data=extracted_data,
             privacy_stats=pii_stats,
-            math_verification=math_report
+            math_verification=math_report,
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Extraction pipeline failed: {str(e)}"
+            detail=f"Extraction pipeline failed: {str(e)}",
         )
 
 
-@app.post("/api/generate-dispute", response_model=DisputeResponse, status_code=status.HTTP_200_OK)
+@app.post(
+    "/api/generate-dispute",
+    response_model=DisputeResponse,
+    status_code=status.HTTP_200_OK,
+)
 def generate_dispute(payload: DisputeRequest):
     """
     Dispute Letter Generation Endpoint:
@@ -78,11 +86,12 @@ def generate_dispute(payload: DisputeRequest):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Dispute generation failed: {str(e)}"
+            detail=f"Dispute generation failed: {str(e)}",
         )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     # Launch Uvicorn development server on port 8000
     uvicorn.run("src.api.main:app", host="127.0.0.1", port=8000, reload=True)

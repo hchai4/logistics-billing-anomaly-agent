@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from pydantic import BaseModel
+from typing import List
 from src.agent.schemas import CarrierInvoiceExtraction, InvoiceItem
 
 
@@ -7,6 +7,7 @@ class ItemMathResult(BaseModel):
     """
     Verification report for a single invoice line item.
     """
+
     tracking_id: str
     calculated_total: float
     extracted_total: float
@@ -18,6 +19,7 @@ class MathVerificationReport(BaseModel):
     """
     Master verification report for an entire invoice.
     """
+
     is_passed: bool
     total_items_checked: int
     failed_items_count: int
@@ -39,9 +41,7 @@ class MathVerifier:
         Verifies arithmetic for a single line item:
         base_charge + fuel_surcharge + tax == grand_total
         """
-        calculated_total = round(
-            item.base_charge + item.fuel_surcharge + item.tax, 2
-        )
+        calculated_total = round(item.base_charge + item.fuel_surcharge + item.tax, 2)
         extracted_total = round(item.grand_total, 2)
         variance = round(abs(calculated_total - extracted_total), 2)
         is_valid = variance <= self.tolerance
@@ -51,10 +51,12 @@ class MathVerifier:
             calculated_total=calculated_total,
             extracted_total=extracted_total,
             variance=variance,
-            is_valid=is_valid
+            is_valid=is_valid,
         )
 
-    def verify_invoice(self, invoice: CarrierInvoiceExtraction) -> MathVerificationReport:
+    def verify_invoice(
+        self, invoice: CarrierInvoiceExtraction
+    ) -> MathVerificationReport:
         """
         Verifies arithmetic across all line items in an extracted invoice.
         """
@@ -73,7 +75,7 @@ class MathVerifier:
             is_passed=is_passed,
             total_items_checked=len(invoice.items),
             failed_items_count=failed_count,
-            item_results=item_results
+            item_results=item_results,
         )
 
 
@@ -88,7 +90,7 @@ if __name__ == "__main__":
         base_charge=45.00,
         fuel_surcharge=8.50,
         tax=0.00,
-        grand_total=53.50  # 45.00 + 8.50 == 53.50 (CORRECT)
+        grand_total=53.50,  # 45.00 + 8.50 == 53.50 (CORRECT)
     )
 
     # 2. Test Case: Hallucinated/Corrupted Line Item
@@ -98,14 +100,14 @@ if __name__ == "__main__":
         base_charge=20.00,
         fuel_surcharge=3.00,
         tax=1.00,
-        grand_total=30.00  # 20.00 + 3.00 + 1.00 = 24.00, NOT 30.00 (HALLUCINATED)
+        grand_total=30.00,  # 20.00 + 3.00 + 1.00 = 24.00, NOT 30.00 (HALLUCINATED)
     )
 
     test_invoice = CarrierInvoiceExtraction(
         invoice_number="TEST-123",
         carrier_name="UPS",
         invoice_date="2026-02-10",
-        items=[valid_item, corrupted_item]
+        items=[valid_item, corrupted_item],
     )
 
     verifier = MathVerifier()

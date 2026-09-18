@@ -24,9 +24,11 @@ def extract_text_from_pdf(pdf_input: Union[str, bytes, io.BytesIO]) -> str:
             extracted_text.append(page_text)
 
     combined_text = "\n".join(extracted_text).strip()
-    
+
     if not combined_text:
-        raise ValueError("The provided PDF contains no extractable text (it might be a scanned image).")
+        raise ValueError(
+            "The provided PDF contains no extractable text (it might be a scanned image)."
+        )
 
     return combined_text
 

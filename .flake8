@@ -1,0 +1,22 @@
+[flake8]
+# Match Black's line length so the formatter and linter never disagree.
+max-line-length = 88
+
+# E203 (whitespace before ':') and W503 (line break before binary operator)
+# are emitted by Black's own preferred formatting; E704 likewise.
+extend-ignore = E203, E704, W503
+
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    .venv,
+    .pytest_cache,
+    build,
+    dist,
+    logs
+
+per-file-ignores =
+    # app/app.py bootstraps sys.path so `src.*` resolves when Streamlit runs the
+    # file directly; those imports must follow the path insertion.
+    app/app.py: E402

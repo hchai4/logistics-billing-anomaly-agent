@@ -7,8 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/logistics_db"
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/logistics_db"
 )
 
 
@@ -26,7 +25,7 @@ class LogisticsAnomalyDetector:
     def load_reconciliation_mart(self) -> pd.DataFrame:
         """Loads records from the dbt Gold Mart table."""
         query = """
-        SELECT 
+        SELECT
             tracking_id,
             package_id,
             primary_invoice_number AS invoice_number,
@@ -45,7 +44,9 @@ class LogisticsAnomalyDetector:
         """
         df = pd.read_sql(query, con=self.engine)
         if df.empty:
-            raise ValueError("No records found in analytics_marts.fct_reconciliation_marts. Run 'dbt run' first.")
+            raise ValueError(
+                "No records found in analytics_marts.fct_reconciliation_marts. Run 'dbt run' first."
+            )
         return df
 
     def compute_grouped_z_scores(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -57,9 +58,12 @@ class LogisticsAnomalyDetector:
 
         # Convert numeric columns to float
         numeric_cols = [
-            "dollar_variance", "weight_variance_lbs", 
-            "actual_scale_weight", "billed_weight", 
-            "expected_total_cost", "billed_total"
+            "dollar_variance",
+            "weight_variance_lbs",
+            "actual_scale_weight",
+            "billed_weight",
+            "expected_total_cost",
+            "billed_total",
         ]
         for col in numeric_cols:
             df_scored[col] = df_scored[col].astype(float)
@@ -104,7 +108,9 @@ class LogisticsAnomalyDetector:
                 if outlier_count > 0 and avg_dollar_variance > 5.0:
                     diagnosis = "Systemic contract tariff / base rate misconfiguration in automated feed"
                 else:
-                    diagnosis = "Nominal automated EDI billing stream with standard variance"
+                    diagnosis = (
+                        "Nominal automated EDI billing stream with standard variance"
+                    )
             elif "PORTAL" in channel or "PDF" in channel:
                 if max_overcharge > 25.0:
                     diagnosis = "Sporadic high-impact manual hub adjustment / optical scale calibration error"
@@ -116,11 +122,19 @@ class LogisticsAnomalyDetector:
             summary[channel] = {
                 "total_shipments": total_packages,
                 "outlier_count": outlier_count,
-                "outlier_rate_pct": round((outlier_count / total_packages) * 100, 2) if total_packages > 0 else 0,
+                "outlier_rate_pct": (
+                    round((outlier_count / total_packages) * 100, 2)
+                    if total_packages > 0
+                    else 0
+                ),
                 "avg_dollar_variance": round(avg_dollar_variance, 2),
-                "std_dollar_variance": round(std_dollar_variance, 2) if not np.isnan(std_dollar_variance) else 0.0,
+                "std_dollar_variance": (
+                    round(std_dollar_variance, 2)
+                    if not np.isnan(std_dollar_variance)
+                    else 0.0
+                ),
                 "max_overcharge": round(max_overcharge, 2),
-                "diagnosis": diagnosis
+                "diagnosis": diagnosis,
             }
         return summary
 
@@ -180,11 +194,22 @@ class LogisticsAnomalyDetector:
 
         # Select only the target columns for insert
         cols_to_export = [
-            "tracking_id", "package_id", "invoice_number", "carrier_name",
-            "source_channel", "actual_scale_weight", "billed_weight",
-            "weight_variance_lbs", "expected_total_cost", "billed_total",
-            "dollar_variance", "z_score", "anomaly_classification",
-            "pattern_diagnosis", "dispute_status", "flagged_at"
+            "tracking_id",
+            "package_id",
+            "invoice_number",
+            "carrier_name",
+            "source_channel",
+            "actual_scale_weight",
+            "billed_weight",
+            "weight_variance_lbs",
+            "expected_total_cost",
+            "billed_total",
+            "dollar_variance",
+            "z_score",
+            "anomaly_classification",
+            "pattern_diagnosis",
+            "dispute_status",
+            "flagged_at",
         ]
 
         # The explicit constructor avoids pandas type-stub ambiguity for list selection.
@@ -194,7 +219,7 @@ class LogisticsAnomalyDetector:
             schema="source_enterprise",
             con=self.engine,
             if_exists="append",
-            index=False
+            index=False,
         )
 
         return len(export_subset)
@@ -203,19 +228,25 @@ class LogisticsAnomalyDetector:
         """Executes full statistical anomaly workflow."""
         print("=== 1. LOADING DBT RECONCILIATION MART ===")
         df_raw = self.load_reconciliation_mart()
-        print(f"Loaded {len(df_raw)} records from analytics_marts.fct_reconciliation_marts.")
+        print(
+            f"Loaded {len(df_raw)} records from analytics_marts.fct_reconciliation_marts."
+        )
 
         print("\n=== 2. COMPUTING GROUPED STATISTICAL Z-SCORES ===")
         df_scored = self.compute_grouped_z_scores(df_raw)
         outliers = df_scored[df_scored["is_statistical_outlier"]]
-        print(f"Calculated Z-scores across carriers. Identified {len(outliers)} statistical outliers (Z > {self.z_threshold}).")
+        print(
+            f"Calculated Z-scores across carriers. Identified {len(outliers)} statistical outliers (Z > {self.z_threshold})."
+        )
 
         print("\n=== 3. INGESTION CHANNEL VARIANCE PATTERN ANALYSIS ===")
         patterns = self.analyze_source_channel_patterns(df_scored)
         for channel, metrics in patterns.items():
             print(f"\nChannel: [{channel}]")
             print(f"  - Total Shipments: {metrics['total_shipments']}")
-            print(f"  - Outliers Flagged: {metrics['outlier_count']} ({metrics['outlier_rate_pct']}%)")
+            print(
+                f"  - Outliers Flagged: {metrics['outlier_count']} ({metrics['outlier_rate_pct']}%)"
+            )
             print(f"  - Mean Dollar Variance: ${metrics['avg_dollar_variance']}")
             print(f"  - Variance Std Dev: ${metrics['std_dollar_variance']}")
             print(f"  - Max Single Overcharge: ${metrics['max_overcharge']}")
@@ -223,7 +254,9 @@ class LogisticsAnomalyDetector:
 
         print("\n=== 4. EXPORTING HIGH-CONFIDENCE ANOMALIES TO AUDIT TABLE ===")
         exported_count = self.export_exceptions_to_db(df_scored, patterns)
-        print(f"Successfully persisted {exported_count} anomalies to source_enterprise.audit_flagged_exceptions.")
+        print(
+            f"Successfully persisted {exported_count} anomalies to source_enterprise.audit_flagged_exceptions."
+        )
 
         return df_scored, patterns
 
