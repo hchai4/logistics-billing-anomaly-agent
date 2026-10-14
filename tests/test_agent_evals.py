@@ -1,4 +1,6 @@
 import pytest
+# from src.agent.llm_agent import InvoiceExtractionAgent
+# from src.agent.math_verifier import MathVerifier
 
 # Do not import src.agent.llm_agent at module load. That module raises if
 # OPENAI_API_KEY is missing, which would crash pytest collection on CI.

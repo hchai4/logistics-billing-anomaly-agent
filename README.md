@@ -129,14 +129,10 @@ docker compose up -d            # API http://127.0.0.1:8000  UI http://localhost
 ```
 
 ## Tests
-
-Offline unit tests (PII masker, printed-amount overlay, math verifier, anomaly detector, e2e PDF extract). They do not call OpenAI. Missing sample PDFs are generated during the e2e test.
-
+Offline unit tests (PII masker, printed-total overlay, math verifier, anomaly detector, e2e PDF extract). They do not call OpenAI:
 ```bash
-python -m spacy download en_core_web_sm
+python data/generate_sample_pdfs.py
 pytest -q
-black --check src app tests
-flake8 src app tests
 ```
 
 `tests/test_agent_evals.py` is a **live** extraction eval (`pytest -m live`). Default `pytest` and GitHub Actions skip it, so CI needs no API key.
