@@ -1,8 +1,24 @@
-import os
+from pathlib import Path
+
 from src.privacy.pii_masker import PIIMasker
 from src.utils.pdf_extractor import extract_text_from_pdf
 from src.agent.math_verifier import MathVerifier
 from src.agent.schemas import InvoiceItem, CarrierInvoiceExtraction
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SAMPLE_PDF = REPO_ROOT / "data" / "sample_valid_invoice.pdf"
+
+
+def _ensure_sample_pdf():
+    if SAMPLE_PDF.exists():
+        return
+    import importlib.util
+
+    script = REPO_ROOT / "data" / "generate_sample_pdfs.py"
+    spec = importlib.util.spec_from_file_location("generate_sample_pdfs", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.generate_all()
 
 
 def test_pii_masker_redacts_sensitive_info():
@@ -23,12 +39,10 @@ def test_pii_masker_redacts_sensitive_info():
 
 def test_pdf_extraction_from_file():
     """Verify that PDF text extractor reads real sample PDF files."""
-    sample_pdf_path = "data/sample_valid_invoice.pdf"
-    assert os.path.exists(
-        sample_pdf_path
-    ), "Sample PDF does not exist. Run data/generate_sample_pdfs.py first."
+    _ensure_sample_pdf()
+    assert SAMPLE_PDF.exists(), "Failed to generate data/sample_valid_invoice.pdf"
 
-    extracted_text = extract_text_from_pdf(sample_pdf_path)
+    extracted_text = extract_text_from_pdf(str(SAMPLE_PDF))
     assert len(extracted_text) > 50
     assert "UPS-994112" in extracted_text
     assert "1Z9999999999999999" in extracted_text

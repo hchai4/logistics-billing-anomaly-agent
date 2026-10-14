@@ -82,8 +82,9 @@ src/utils/                 PDF text extraction
 src/db/                    Writes extracted lines to PostgreSQL
 src/analytics/             Z-score detector over the dbt mart
 src/api/                   FastAPI: /api/extract, /api/generate-dispute
-tests/                     Unit and e2e pipeline tests
+tests/                     Unit tests, e2e pipeline, and live LLM extraction evals
 data/                      Fixture generators (PDFs/CSVs are gitignored)
+docker/init.sql            Schema bootstrap if `logistics_db` is empty
 ```
 
 ## Setup
@@ -96,7 +97,7 @@ python -m spacy download en_core_web_sm
 cp .env.example .env   # then set OPENAI_API_KEY
 ```
 
-PostgreSQL must be reachable at `DATABASE_URL` (default `localhost:5432/logistics_db`) with schemas `source_enterprise` and `analytics_marts`.
+PostgreSQL must already be running at `DATABASE_URL` (default `localhost:5432/logistics_db`) with schemas `source_enterprise` and `analytics_marts`. Compose does not start a second database; API and UI reuse that instance. If the schemas are missing, apply `docker/init.sql`.
 
 Rebuild analytical marts from the dbt project (use the venv's `dbt-core`, not dbt Fusion):
 
@@ -121,8 +122,33 @@ python -m src.api.main          # http://127.0.0.1:8000
 streamlit run app/app.py        # http://localhost:8501
 ```
 
+Or, with an existing Postgres on host port 5432:
+
 ```bash
-pytest
-black src app tests
+docker compose up -d            # API http://127.0.0.1:8000  UI http://localhost:8501
+```
+
+## Tests
+
+Offline unit tests (PII masker, printed-amount overlay, math verifier, anomaly detector, e2e PDF extract). They do not call OpenAI. Missing sample PDFs are generated during the e2e test.
+
+```bash
+python -m spacy download en_core_web_sm
+pytest -q
+black --check src app tests
 flake8 src app tests
 ```
+
+`tests/test_agent_evals.py` is a **live** extraction eval (`pytest -m live`). Default `pytest` and GitHub Actions skip it, so CI needs no API key.
+
+| Case | What it probes | Math check |
+|---|---|---|
+| `clean_standard_invoice` | Clean UPS line: tracking, weight, printed total | pass (`40 + 5 = 45`) |
+| `noisy_spaces_and_casing` | Spaced / mixed-case FedEx tracking (`1z 222 222` → `1Z222222`) | pass |
+| `arithmetic_hallucination_invoice` | Printed total disagrees with components (`20 + 3 ≠ 35`); model must copy `$35.00`, verifier must fail | fail |
+
+```bash
+pytest -q -m live tests/test_agent_evals.py
+```
+
+GitHub Actions on each PR runs lint, offline tests, and `docker build` only.
