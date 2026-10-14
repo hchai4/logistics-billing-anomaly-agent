@@ -1,27 +1,30 @@
-import os
+from pathlib import Path
+
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+DATA_DIR = Path(__file__).resolve().parent
+
 
 def create_invoice_pdf(filename: str, title: str, lines: list):
-    os.makedirs("data", exist_ok=True)
-    file_path = os.path.join("data", filename)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = DATA_DIR / filename
     c = canvas.Canvas(file_path, pagesize=letter)
-    
+
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, 750, title)
-    
+
     c.setFont("Helvetica", 11)
     y = 710
     for line in lines:
         c.drawString(50, y, line)
         y -= 22
-        
+
     c.save()
     print(f"✅ Generated sample PDF: {file_path}")
 
 
-if __name__ == "__main__":
+def generate_all():
     # 1. Valid Invoice PDF (Math passes: 45.00 + 8.50 = 53.50; 12.00 + 2.00 = 14.00)
     valid_lines = [
         "Invoice Number: UPS-994112",
@@ -40,9 +43,11 @@ if __name__ == "__main__":
         "Billed Weight: 4.0 lbs",
         "Base Rate: $12.00",
         "Fuel Surcharge: $2.00",
-        "Total Item Charge: $14.00"
+        "Total Item Charge: $14.00",
     ]
-    create_invoice_pdf("sample_valid_invoice.pdf", "UPS FREIGHT BILLING STATEMENT", valid_lines)
+    create_invoice_pdf(
+        "sample_valid_invoice.pdf", "UPS FREIGHT BILLING STATEMENT", valid_lines
+    )
 
     # 2. Corrupted Invoice PDF (Math fails: 30.00 + 5.00 + 1.50 = 36.50, but billed $45.00)
     corrupted_lines = [
@@ -57,6 +62,12 @@ if __name__ == "__main__":
         "Base Rate: $30.00",
         "Fuel Surcharge: $5.00",
         "Tax: $1.50",
-        "Total Item Charge: $45.00"  # Hallucinated/Corrupted: 30 + 5 + 1.50 = 36.50
+        "Total Item Charge: $45.00",  # Hallucinated/Corrupted: 30 + 5 + 1.50 = 36.50
     ]
-    create_invoice_pdf("sample_corrupted_invoice.pdf", "FEDEX EXPRESS INVOICE", corrupted_lines)
+    create_invoice_pdf(
+        "sample_corrupted_invoice.pdf", "FEDEX EXPRESS INVOICE", corrupted_lines
+    )
+
+
+if __name__ == "__main__":
+    generate_all()
