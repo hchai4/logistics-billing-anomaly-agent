@@ -5,7 +5,6 @@ from src.agent.printed_amounts import (
 )
 from src.agent.schemas import CarrierInvoiceExtraction, InvoiceItem
 
-
 CORRUPTED_INVOICE = """FEDEX EXPRESS INVOICE #FDX-554201
 Line Item 1:
 Tracking Number: 7949 1122 3344
