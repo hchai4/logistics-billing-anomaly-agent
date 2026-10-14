@@ -9,7 +9,7 @@ DATA_DIR = Path(__file__).resolve().parent
 def create_invoice_pdf(filename: str, title: str, lines: list):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     file_path = DATA_DIR / filename
-    c = canvas.Canvas(file_path, pagesize=letter)
+    c = canvas.Canvas(str(file_path), pagesize=letter)
 
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, 750, title)

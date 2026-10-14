@@ -141,15 +141,12 @@ def load_reconciliation_mart() -> pd.DataFrame:
 
 def update_dispute_status_in_db(row_data: dict):
     """Updates or records dispute status as DISPUTE_SENT in PostgreSQL."""
-    update_sql = text(
-        """
+    update_sql = text("""
     UPDATE source_enterprise.audit_flagged_exceptions
     SET dispute_status = 'DISPUTE_SENT', flagged_at = CURRENT_TIMESTAMP
     WHERE tracking_id = :tracking_id;
-    """
-    )
-    insert_sql = text(
-        """
+    """)
+    insert_sql = text("""
     INSERT INTO source_enterprise.audit_flagged_exceptions (
         tracking_id, package_id, invoice_number, carrier_name, source_channel,
         actual_scale_weight, billed_weight, weight_variance_lbs,
@@ -161,8 +158,7 @@ def update_dispute_status_in_db(row_data: dict):
         :expected_total_cost, :billed_total, :dollar_variance,
         :anomaly_classification, 'DISPUTE_SENT', CURRENT_TIMESTAMP
     );
-    """
-    )
+    """)
     params = {col: row_data[col] for col in AUDIT_COLUMNS}
     with get_engine().begin() as conn:
         if conn.execute(update_sql, params).rowcount == 0:

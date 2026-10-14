@@ -27,6 +27,9 @@ jobs:
           black --check src app tests
           flake8 src app tests
 
+      - name: Generate sample PDFs for e2e
+        run: python data/generate_sample_pdfs.py
+
       - name: Offline tests
         run: pytest -q
 
