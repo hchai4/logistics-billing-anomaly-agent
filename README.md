@@ -20,9 +20,9 @@ docker compose up -d --build
 |---|---|
 | API health | http://127.0.0.1:8000/health |
 | Streamlit UI | http://localhost:8501 |
-| Postgres (from your Mac) | `localhost:5433` — user/password/db `postgres` / `postgres` / `logistics_db` |
+| Postgres (from your Mac) | `localhost:5432` — user/password/db `postgres` / `postgres` / `logistics_db` |
 
-Compose starts API, UI, **and** Postgres. Do not start a second Postgres on 5432. Inside the Compose network the DB host is `postgres:5432`; the compose file sets `DATABASE_URL` for the containers. The `DATABASE_URL` in `.env.example` (`localhost:5432`) is only for the optional host-venv path below.
+Compose starts API, UI, **and** Postgres, published on host port **5432**. If another Postgres is already using 5432, stop it first. Inside the Compose network the DB host is `postgres:5432`; the compose file sets `DATABASE_URL` for the containers. The `DATABASE_URL` in `.env.example` (`localhost:5432`) is the same port, for the host venv and for tools on your Mac.
 
 `docker/init.sql` creates empty schemas `source_enterprise` and `analytics_marts`. It does not load invoices or dbt marts.
 
@@ -39,7 +39,7 @@ curl -s http://127.0.0.1:8000/health
 |---|---|
 | Sidebar | PostgreSQL connected, FastAPI online |
 | Tab 1 | Paste a short invoice and extract (uses the API key) |
-| Tab 2 | Empty or a SQL error until you seed + `dbt run` — warehouse marts are not built yet |
+| Tab 2 | SQL error until the host seed, `dbt seed`, `dbt run`, and anomaly detector have run. Compose does not start dbt |
 
 Stop the stack with `docker compose down`. The `pgdata` volume stays.
 
@@ -81,7 +81,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   UI[Streamlit :8501] --> API[FastAPI :8000]
-  API --> PG[Postgres :5433 on host]
+  API --> PG[Postgres :5432]
 ```
 
 ```
@@ -167,7 +167,9 @@ docker/init.sql            Empty schema bootstrap for Compose Postgres
 
 ## Load demo warehouse data (optional, Tab 2)
 
-Compose must already be up. Run the seeder from a **host** venv against port **5433**:
+Compose starts Postgres, the API, and Streamlit only. It does not clone the dbt repo or build marts. Tab 2 reads `analytics_marts.fct_reconciliation_marts` and also joins `source_enterprise.audit_flagged_exceptions`. The mart comes from dbt. The audit table comes from the anomaly detector. Both run on your Mac, against the Compose database on port **5432**.
+
+Compose must already be up. Seed the raw tables from a **host** venv:
 
 ```bash
 python3 -m venv venv
@@ -175,20 +177,33 @@ source venv/bin/activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/logistics_db \
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/logistics_db \
   python data/generate_data.py
 ```
 
-Then clone the sibling dbt repo and point it at the same port (the dbt profile defaults to `5432`):
+Clone the sibling dbt repo and build the contract seeds plus the mart. Its profile already defaults to `localhost:5432`. Use that repo's venv and `dbt-core`, not dbt Fusion, and not the billing venv above (that venv does not install dbt):
 
 ```bash
 cd ..
 git clone https://github.com/hchai4/logistics-billing-anomaly-agent-dbt.git
 cd logistics-billing-anomaly-agent-dbt
-POSTGRES_PORT=5433 dbt run
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+dbt seed
+dbt run
 ```
 
-Use that venv's `dbt-core`, not dbt Fusion. Refresh Tab 2 for flagged packages and the dispute-letter flow.
+Back in this repo, write the audit table Tab 2 joins. `dbt run` alone leaves that table missing, and the page still errors:
+
+```bash
+cd ../logistics-billing-anomaly-agent
+source venv/bin/activate
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/logistics_db \
+  python -m src.analytics.anomaly_detector
+```
+
+Refresh Tab 2 for flagged packages and the dispute-letter flow.
 
 ## Host venv (optional, no Compose)
 
