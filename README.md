@@ -1,10 +1,88 @@
 # Logistics Billing Anomaly Agent
 
+[![CI](https://github.com/hchai4/logistics-billing-anomaly-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/hchai4/logistics-billing-anomaly-agent/actions/workflows/ci.yml)
+
 Freight-audit system that cross-examines warehouse scale scans, UPS EDI 210 invoices, and unstructured portal/email PDFs. Overcharges are quantified in PostgreSQL by dbt, then surfaced in a Streamlit HITL workflow that drafts carrier dispute letters.
+
+## Quick start
+
+Needs Docker Desktop and an OpenAI key (Tab 1 extract only).
+
+```bash
+git clone https://github.com/hchai4/logistics-billing-anomaly-agent.git
+cd logistics-billing-anomaly-agent
+cp .env.example .env
+# set OPENAI_API_KEY in .env — leave DATABASE_URL as the example
+docker compose up -d --build
+```
+
+| Service | URL |
+|---|---|
+| API health | http://127.0.0.1:8000/health |
+| Streamlit UI | http://localhost:8501 |
+| Postgres (from your Mac) | `localhost:5433` — user/password/db `postgres` / `postgres` / `logistics_db` |
+
+Compose starts API, UI, **and** Postgres. Do not start a second Postgres on 5432. Inside the Compose network the DB host is `postgres:5432`; the compose file sets `DATABASE_URL` for the containers. The `DATABASE_URL` in `.env.example` (`localhost:5432`) is only for the optional host-venv path below.
+
+`docker/init.sql` creates empty schemas `source_enterprise` and `analytics_marts`. It does not load invoices or dbt marts.
+
+### What you should see
+
+```bash
+curl -s http://127.0.0.1:8000/health
+# {"status":"healthy","service":"Logistics AI Agent API"}
+```
+
+`docker compose ps`: `postgres` and `api` healthy, `ui` running.
+
+| Surface | After compose only |
+|---|---|
+| Sidebar | PostgreSQL connected, FastAPI online |
+| Tab 1 | Paste a short invoice and extract (uses the API key) |
+| Tab 2 | Empty or a SQL error until you seed + `dbt run` — warehouse marts are not built yet |
+
+Stop the stack with `docker compose down`. The `pgdata` volume stays.
 
 ## Architecture
 
 Four layers, each with a single job: land independent evidence, sanitize it, reconcile it, then act on the result.
+
+```mermaid
+flowchart LR
+  subgraph sources [Source]
+    WMS[WMS scans]
+    EDI[UPS EDI 210]
+    PDF[Portal / email PDFs]
+  end
+
+  subgraph ingest [Ingestion and privacy]
+    PII[Local PII redaction]
+    LLM[Instructor / Pydantic extract]
+    MATH[Printed total + Python math check]
+  end
+
+  subgraph warehouse [Warehouse]
+    RAW[source_enterprise]
+    DBT[dbt staging / intermediate / marts]
+    GATES[5 deterministic gates]
+  end
+
+  subgraph action [Action]
+    Z[Z-score flags]
+    HITL[Streamlit HITL dispute letter]
+  end
+
+  WMS --> RAW
+  EDI --> RAW
+  PDF --> PII --> LLM --> MATH --> RAW
+  RAW --> DBT --> GATES --> Z --> HITL
+```
+
+```mermaid
+flowchart LR
+  UI[Streamlit :8501] --> API[FastAPI :8000]
+  API --> PG[Postgres :5433 on host]
+```
 
 ```
 Source ──► Ingestion & Privacy ──► Warehouse (PostgreSQL + dbt) ──► Action
@@ -84,55 +162,62 @@ src/analytics/             Z-score detector over the dbt mart
 src/api/                   FastAPI: /api/extract, /api/generate-dispute
 tests/                     Unit tests, e2e pipeline, and live LLM extraction evals
 data/                      Fixture generators (PDFs/CSVs are gitignored)
-docker/init.sql            Schema bootstrap if `logistics_db` is empty
+docker/init.sql            Empty schema bootstrap for Compose Postgres
 ```
 
-## Setup
+## Load demo warehouse data (optional, Tab 2)
+
+Compose must already be up. Run the seeder from a **host** venv against port **5433**:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
-cp .env.example .env   # then set OPENAI_API_KEY
+
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/logistics_db \
+  python data/generate_data.py
 ```
 
-PostgreSQL must already be running at `DATABASE_URL` (default `localhost:5432/logistics_db`) with schemas `source_enterprise` and `analytics_marts`. Compose does not start a second database; API and UI reuse that instance. If the schemas are missing, apply `docker/init.sql`.
-
-Rebuild analytical marts from the dbt project (use the venv's `dbt-core`, not dbt Fusion):
+Then clone the sibling dbt repo and point it at the same port (the dbt profile defaults to `5432`):
 
 ```bash
-cd ../logistics-billing-anomaly-agent-dbt
-dbt run
+cd ..
+git clone https://github.com/hchai4/logistics-billing-anomaly-agent-dbt.git
+cd logistics-billing-anomaly-agent-dbt
+POSTGRES_PORT=5433 dbt run
 ```
 
-Generate demo PDFs if you need them for tests:
+Use that venv's `dbt-core`, not dbt Fusion. Refresh Tab 2 for flagged packages and the dispute-letter flow.
+
+## Host venv (optional, no Compose)
+
+If you already have Postgres on `localhost:5432` and do not want Docker:
 
 ```bash
-python data/generate_sample_pdfs.py
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+cp .env.example .env   # set OPENAI_API_KEY; DATABASE_URL stays localhost:5432
 ```
 
-## Run
+Apply `docker/init.sql` if the schemas are missing, then:
 
 ```bash
-# API
 python -m src.api.main          # http://127.0.0.1:8000
-
-# UI
 streamlit run app/app.py        # http://localhost:8501
 ```
 
-Or, with an existing Postgres on host port 5432:
-
-```bash
-docker compose up -d            # API http://127.0.0.1:8000  UI http://localhost:8501
-```
-
 ## Tests
-Offline unit tests (PII masker, printed-total overlay, math verifier, anomaly detector, e2e PDF extract). They do not call OpenAI:
+
+Offline unit tests (PII masker, printed-total overlay, math verifier, anomaly detector, e2e PDF extract). They do not call OpenAI. Missing sample PDFs are generated during the e2e test.
+
 ```bash
-python data/generate_sample_pdfs.py
+python -m spacy download en_core_web_sm
 pytest -q
+black --check src app tests
+flake8 src app tests
 ```
 
 `tests/test_agent_evals.py` is a **live** extraction eval (`pytest -m live`). Default `pytest` and GitHub Actions skip it, so CI needs no API key.
