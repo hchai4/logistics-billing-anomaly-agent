@@ -33,8 +33,13 @@ def insert_extracted_invoice(
         base_charge,
         fuel_surcharge,
         grand_total,
-        extraction_source
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+        extraction_source,
+        invoice_date,
+        service_level_billed,
+        zone_billed,
+        dest_zip,
+        delivery_timestamp
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
 
     records_to_insert = []
@@ -49,6 +54,11 @@ def insert_extracted_invoice(
                 item.fuel_surcharge,
                 item.grand_total,
                 source_label,
+                invoice.invoice_date,
+                getattr(item, "service_level_billed", None),
+                getattr(item, "zone_billed", None),
+                getattr(item, "dest_zip", None),
+                getattr(item, "delivery_timestamp", None),
             )
         )
 

@@ -20,9 +20,10 @@ docker compose up -d --build
 |---|---|
 | API health | http://127.0.0.1:8000/health |
 | Streamlit UI | http://localhost:8501 |
+| Airflow | http://localhost:8080 |
 | Postgres (from your Mac) | `localhost:5432` — user/password/db `postgres` / `postgres` / `logistics_db` |
 
-Compose starts API, UI, **and** Postgres, published on host port **5432**. If another Postgres is already using 5432, stop it first. Inside the Compose network the DB host is `postgres:5432`; the compose file sets `DATABASE_URL` for the containers. The `DATABASE_URL` in `.env.example` (`localhost:5432`) is the same port, for the host venv and for tools on your Mac.
+Compose starts the API, the UI, Airflow, **and** Postgres, published on host port **5432**. If another Postgres is already using 5432, stop it first. Inside the Compose network the DB host is `postgres:5432`; the compose file sets `DATABASE_URL` for the containers. The `DATABASE_URL` in `.env.example` (`localhost:5432`) is the same port, for the host venv and for tools on your Mac.
 
 `docker/init.sql` creates empty schemas `source_enterprise` and `analytics_marts`. It does not load invoices or dbt marts.
 
@@ -33,13 +34,13 @@ curl -s http://127.0.0.1:8000/health
 # {"status":"healthy","service":"Logistics AI Agent API"}
 ```
 
-`docker compose ps`: `postgres` and `api` healthy, `ui` running.
+`docker compose ps`: `postgres` and `api` healthy, `ui` and `airflow` running.
 
 | Surface | After compose only |
 |---|---|
 | Sidebar | PostgreSQL connected, FastAPI online |
 | Tab 1 | Paste a short invoice and extract (uses the API key) |
-| Tab 2 | SQL error until the host seed, `dbt seed`, `dbt run`, and anomaly detector have run. Compose does not start dbt |
+| Tab 2 | SQL error until `billing_warehouse` has built the mart and the anomaly detector has written the audit table |
 
 Stop the stack with `docker compose down`. The `pgdata` volume stays.
 
@@ -163,11 +164,37 @@ src/api/                   FastAPI: /api/extract, /api/generate-dispute
 tests/                     Unit tests, e2e pipeline, and live LLM extraction evals
 data/                      Fixture generators (PDFs/CSVs are gitignored)
 docker/init.sql            Empty schema bootstrap for Compose Postgres
+airflow/Dockerfile         Airflow image with a separate dbt virtualenv
+airflow/dags/              billing_warehouse DAG: seed, dbt seed, dbt run, dbt test
 ```
 
-## Load demo warehouse data (optional, Tab 2)
+## Warehouse DAG (Airflow)
 
-Compose starts Postgres, the API, and Streamlit only. It does not clone the dbt repo or build marts. Tab 2 reads `analytics_marts.fct_reconciliation_marts` and also joins `source_enterprise.audit_flagged_exceptions`. The mart comes from dbt. The audit table comes from the anomaly detector. Both run on your Mac, against the Compose database on port **5432**.
+Compose starts Airflow at http://localhost:8080. The DAG `billing_warehouse` is the scheduled path for the demo warehouse. It runs four tasks, in order, against the Compose database:
+
+1. `data/generate_data.py` reloads the raw `source_enterprise` tables.
+2. `dbt seed` loads the contract CSVs.
+3. `dbt run` builds `analytics_marts.fct_reconciliation_marts`.
+4. `dbt test` runs the dbt singular tests.
+
+The schedule is `@daily` (midnight UTC) with `catchup=False`. Trigger it once from the UI instead of waiting for midnight. The login is `admin`. The password is printed at startup:
+
+```bash
+docker compose logs airflow | grep password
+```
+
+Airflow runs dbt from the sibling repo, mounted at `/opt/dbt`. Clone that repo next to this one before `docker compose up`:
+
+```bash
+cd ..
+git clone https://github.com/hchai4/logistics-billing-anomaly-agent-dbt.git
+```
+
+The DAG does not run the anomaly detector. Tab 2 still joins `source_enterprise.audit_flagged_exceptions`, so after a green `dbt run` the page errors until that table exists. The host commands in the next section are the fallback, and they include that last step.
+
+## Load demo warehouse data (host fallback, Tab 2)
+
+Use this when you are not running the Airflow service. Tab 2 reads `analytics_marts.fct_reconciliation_marts` and also joins `source_enterprise.audit_flagged_exceptions`. The mart comes from dbt. The audit table comes from the anomaly detector. Both run on your Mac, against the Compose database on port **5432**.
 
 Compose must already be up. Seed the raw tables from a **host** venv:
 
