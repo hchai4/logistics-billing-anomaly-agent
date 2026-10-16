@@ -41,5 +41,30 @@ services:
       - "8501:8501"
     depends_on:
       - api
+
+  airflow:
+    build: ./airflow
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: logistics_db
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/logistics_db
+      DBT_PROFILES_DIR: /opt/dbt
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./:/opt/billing
+      - ../logistics-billing-anomaly-agent-dbt:/opt/dbt
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: standalone
+    
 volumes:
   pgdata:
