@@ -165,19 +165,33 @@ tests/                     Unit tests, e2e pipeline, and live LLM extraction eva
 data/                      Fixture generators (PDFs/CSVs are gitignored)
 docker/init.sql            Empty schema bootstrap for Compose Postgres
 airflow/Dockerfile         Airflow image with a separate dbt virtualenv
-airflow/dags/              billing_warehouse DAG: seed, dbt seed, dbt run, dbt test
+airflow/dags/              billing_warehouse DAG: seed, dbt seed, dbt run, dbt test, flag_anomalies
 ```
 
 ## Warehouse DAG (Airflow)
 
-Compose starts Airflow at http://localhost:8080. The DAG `billing_warehouse` is the scheduled path for the demo warehouse. It runs four tasks, in order, against the Compose database:
+Compose starts Airflow at http://localhost:8080. The DAG `billing_warehouse` is the scheduled path for the demo warehouse. It runs five tasks, in order, against the Compose database:
 
-1. `data/generate_data.py` reloads the raw `source_enterprise` tables.
-2. `dbt seed` loads the contract CSVs.
-3. `dbt run` builds `analytics_marts.fct_reconciliation_marts`.
-4. `dbt test` runs the dbt singular tests.
+1. `seed_source_tables` reloads the raw `source_enterprise` tables. Each run receives `LOGICAL_DATE` (`{{ ds }}`). The seeder drops and reloads every raw table, so a second run does not duplicate rows.
+2. `dbt_seed` loads the contract CSVs.
+3. `dbt_run` builds `analytics_marts.fct_reconciliation_marts`.
+4. `dbt_test` runs the dbt singular tests.
+5. `flag_anomalies` runs `python -m src.analytics.anomaly_detector` and writes `source_enterprise.audit_flagged_exceptions`.
 
-The schedule is `@daily` (midnight UTC) with `catchup=False`. Trigger it once from the UI instead of waiting for midnight. The login is `admin`. The password is printed at startup:
+Tab 2 joins that audit table, so the page stays empty until `flag_anomalies` succeeds. `dbt_test` can be red while `flag_anomalies` still runs: that task uses `trigger_rule="all_done"`.
+
+Every task retries twice, two minutes apart. `flag_anomalies` has a one-hour SLA. A failed task logs `ALERT <dag_id>.<task_id> failed for logical date <ds>`.
+
+The schedule is `@daily` (midnight UTC) with `catchup=False`. The scheduler does not create old days. Trigger once from the UI, or backfill a range on purpose:
+
+```bash
+docker compose exec airflow airflow dags backfill \
+  --start-date 2026-10-15 \
+  --end-date 2026-10-16 \
+  billing_warehouse
+```
+
+The login is `admin`. A new container prints a new password:
 
 ```bash
 docker compose logs airflow | grep password
@@ -190,7 +204,7 @@ cd ..
 git clone https://github.com/hchai4/logistics-billing-anomaly-agent-dbt.git
 ```
 
-The DAG does not run the anomaly detector. Tab 2 still joins `source_enterprise.audit_flagged_exceptions`, so after a green `dbt run` the page errors until that table exists. The host commands in the next section are the fallback, and they include that last step.
+The host commands in the next section are the fallback when the Airflow service is not running.
 
 ## Load demo warehouse data (host fallback, Tab 2)
 
